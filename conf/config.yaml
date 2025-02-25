@@ -8,10 +8,10 @@ defaults:
 
 dummy:
 dset:
-  musdb: /checkpoint/defossez/datasets/musdbhq
+  musdb: ""
   musdb_samplerate: 44100
   use_musdb: true   # set to false to not use musdb as training data.
-  wav:  # path to custom wav dataset
+  wav:  "/media/gerardoroadabike/Extreme SSD1/Challenges/CAD2/cadenza_data/cad2/task2/audio" # path to custom wav dataset
   wav2:  # second custom wav dataset
   segment: 11
   shift: 1
@@ -21,7 +21,7 @@ dset:
   channels: 2
   normalize: true
   metadata: ./metadata
-  sources: ['drums', 'bass', 'other', 'vocals']
+  sources: ['Bassoon', 'Cello', 'Clarinet', 'Flute', 'Oboe', 'Sax', 'Viola', 'Violin']
   valid_samples: # valid dataset size
   backend: null   # if provided select torchaudio backend.
 
@@ -55,7 +55,7 @@ debug: false
 valid_apply: true
 flag:
 save_every:
-weights: [1., 1., 1., 1.]  # weights over each source for the training/valid loss.
+weights: [1., 1., 1., 1., 1., 1., 1., 1.]  # weights over each source for the training/valid loss.
 
 augment:
   shift_same: false

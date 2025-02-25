@@ -18,10 +18,10 @@ from torch import nn
 from torch.nn import functional as F
 import tqdm
 
-from .demucs import Demucs
-from .hdemucs import HDemucs
-from .htdemucs import HTDemucs
-from .utils import center_trim, DummyPoolExecutor
+from demucs import Demucs
+from hdemucs import HDemucs
+from htdemucs import HTDemucs
+from utils import center_trim, DummyPoolExecutor
 
 Model = tp.Union[Demucs, HDemucs, HTDemucs]
 
@@ -51,7 +51,7 @@ class BagOfModels(nn.Module):
             assert other.samplerate == first.samplerate
             assert other.audio_channels == first.audio_channels
             if segment is not None:
-                if not isinstance(other, HTDemucs) and segment > other.segment:
+                if not isinstance(other, HTDemucs) or segment <= other.segment:
                     other.segment = segment
 
         self.audio_channels = first.audio_channels

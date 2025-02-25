@@ -15,20 +15,21 @@ from dora import hydra_main
 import hydra
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
+import audio_legacy
 import torch
 from torch import nn
 import torchaudio
 from torch.utils.data import ConcatDataset
 
-from . import distrib
-from .wav import get_wav_datasets, get_musdb_wav_datasets
-from .demucs import Demucs
-from .hdemucs import HDemucs
-from .htdemucs import HTDemucs
-from .repitch import RepitchedWrapper
-from .solver import Solver
-from .states import capture_init
-from .utils import random_subset
+import distrib
+from wav import get_wav_datasets, get_musdb_wav_datasets
+from demucs import Demucs
+from hdemucs import HDemucs
+from htdemucs import HTDemucs
+from repitch import RepitchedWrapper
+from solver import Solver
+from states import capture_init
+from utils import random_subset
 
 logger = logging.getLogger(__name__)
 

@@ -11,20 +11,55 @@ import math
 import json
 import os
 from pathlib import Path
+
+import torch
 import tqdm
 
 import musdb
 import julius
+# from . import audio_legacy
 import torch as th
 from torch import distributed
 import torchaudio as ta
 from torch.nn import functional as F
+from collections import defaultdict
 
-from .audio import convert_audio_channels
-from . import distrib
+from audio import convert_audio_channels
+import distrib
 
 MIXTURE = "mixture"
-EXT = ".wav"
+EXT = ".flac"
+
+
+def sum_and_save_stems(audio_dir, ext=EXT):
+    audio_dir = Path(audio_dir)
+    instrument_groups = defaultdict(list)
+
+    # Group instruments by base name
+    for file in audio_dir.glob("*.flac"):
+        stem_parts = file.stem.rsplit('_', 1)
+
+        if len(stem_parts) > 1 and stem_parts[1].isdigit():
+            base_name = stem_parts[0]  # Extract instrument name
+            instrument_groups[base_name].append(file)
+
+    for instrument, files in instrument_groups.items():
+        if len(files) > 1:  # Only process if multiple stems exist
+            summed_audio = None
+            sr = None
+
+            for file in files:
+                audio, sr = ta.load(file)
+
+                if summed_audio is None:
+                    summed_audio = audio
+                else:
+                    min_len = min(summed_audio.shape[-1], audio.shape[-1])
+                    summed_audio[:, :min_len] += audio[:, :min_len]  # Ensure length match
+
+            output_path = audio_dir / f"{instrument}{ext}"
+            ta.save(output_path, summed_audio, sr, format=ext.replace(".", ""))
+            print(f"Saved: {output_path} - {len(files)} sources")
 
 
 def _track_metadata(track, sources, normalize=True, ext=EXT):
@@ -32,18 +67,25 @@ def _track_metadata(track, sources, normalize=True, ext=EXT):
     track_samplerate = None
     mean = 0
     std = 1
+    sum_and_save_stems(track)
+
     for source in sources + [MIXTURE]:
         file = track / f"{source}{ext}"
         if source == MIXTURE and not file.exists():
             audio = 0
             for sub_source in sources:
                 sub_file = track / f"{sub_source}{ext}"
+                if not sub_file.exists():
+                    continue
+
                 sub_audio, sr = ta.load(sub_file)
                 audio += sub_audio
             would_clip = audio.abs().max() >= 1
             if would_clip:
                 assert ta.get_audio_backend() == 'soundfile', 'use dset.backend=soundfile'
-            ta.save(file, audio, sr, encoding='PCM_F')
+            ta.save(file, audio, sr, format=ext.replace(".", ""))
+        if not file.exists():
+            continue
 
         try:
             info = ta.info(str(file))
@@ -97,10 +139,10 @@ def build_metadata(path, sources, normalize=True, ext=EXT):
             if root.name.startswith('.') or folders or root == path:
                 continue
             name = str(root.relative_to(path))
-            pendings.append((name, pool.submit(_track_metadata, root, sources, normalize, ext)))
-            # meta[name] = _track_metadata(root, sources, normalize, ext)
-        for name, pending in tqdm.tqdm(pendings, ncols=120):
-            meta[name] = pending.result()
+            # pendings.append((name, pool.submit(_track_metadata, root, sources, normalize, ext)))
+            meta[name] = _track_metadata(root, sources, normalize, ext)
+        # for name, pending in tqdm.tqdm(pendings, ncols=120):
+        #     meta[name] = pending.result()
     return meta
 
 
@@ -169,9 +211,15 @@ class Wavset:
             wavs = []
             for source in self.sources:
                 file = self.get_file(name, source)
-                wav, _ = ta.load(str(file), frame_offset=offset, num_frames=num_frames)
+                if file.exists():
+                    wav, _ = ta.load(str(file), frame_offset=offset, num_frames=num_frames)
+                else:
+                    wav = torch.zeros((2, num_frames))
                 wav = convert_audio_channels(wav, self.channels)
                 wavs.append(wav)
+
+            min_length = min(w.shape[1] for w in wavs)
+            wavs = [w[:, :min_length] for w in wavs]
 
             example = th.stack(wavs)
             example = julius.resample_frac(example, meta['samplerate'], self.samplerate)
@@ -195,7 +243,7 @@ def get_wav_datasets(args, name='wav'):
         metadata_file.parent.mkdir(exist_ok=True, parents=True)
         train = build_metadata(train_path, args.sources)
         valid = build_metadata(valid_path, args.sources)
-        json.dump([train, valid], open(metadata_file, "w"))
+        json.dump([train, valid], open(metadata_file, "w"), indent=4)
     if distrib.world_size > 1:
         distributed.barrier()
     train, valid = json.load(open(metadata_file))
@@ -229,7 +277,7 @@ def get_musdb_wav_datasets(args):
     if not metadata_file.is_file() and distrib.rank == 0:
         metadata_file.parent.mkdir(exist_ok=True, parents=True)
         metadata = build_metadata(root, args.sources)
-        json.dump(metadata, open(metadata_file, "w"))
+        json.dump(metadata, open(metadata_file, "w"), indent=4)
     if distrib.world_size > 1:
         distributed.barrier()
     metadata = json.load(open(metadata_file))
@@ -252,3 +300,31 @@ def get_musdb_wav_datasets(args):
                        samplerate=args.samplerate, channels=args.channels,
                        normalize=args.normalize, **kw_cv)
     return train_set, valid_set
+
+
+if __name__ == "__main__":
+    from omegaconf import OmegaConf
+
+    dset_config = OmegaConf.create({
+        'musdb': '/home/gerardoroadabike/Documents/musdb18hq',
+        'musdb_samplerate': 44100,
+        'use_musdb': False,   # set to false to not use musdb as training data.
+        'wav':  "", # path to custom wav dataset
+        'wav2': "", # second custom wav dataset
+        'cad2': "/media/gerardoroadabike/Extreme SSD1/Challenges/CAD2/cadenza_data/cad2/task2/audio",
+        'segment': 11,
+        'shift': 1,
+        'train_valid': False,
+        'full_cv': True,
+        'samplerate': 44100,
+        'channels': 2,
+        'normalize': True,
+        'metadata': './metadata',
+        'sources': ['Bassoon', 'Cello', 'Clarinet', 'Flute', 'Oboe', 'Sax', 'Viola', 'Violin'],
+        'valid_samples': "", # valid dataset size
+        'backend': None
+    })
+
+    train, valid = get_wav_datasets(dset_config, name="cad2")
+
+
