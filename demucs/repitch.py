@@ -13,7 +13,7 @@ import tempfile
 import torch
 import torchaudio as ta
 
-from audio import save_audio
+from .audio import save_audio
 
 
 class RepitchedWrapper:

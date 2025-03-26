@@ -23,7 +23,7 @@ dset:
   metadata: ./metadata
   sources: ['Bassoon', 'Cello', 'Clarinet', 'Flute', 'Oboe', 'Sax', 'Viola', 'Violin']
   valid_samples: # valid dataset size
-  backend: null   # if provided select torchaudio backend.
+  backend: sox_io   # if provided select torchaudio backend.
 
 test:
   save: False

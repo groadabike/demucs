@@ -24,8 +24,8 @@ import torchaudio as ta
 from torch.nn import functional as F
 from collections import defaultdict
 
-from audio import convert_audio_channels
-import distrib
+from .audio import convert_audio_channels
+from . import distrib
 
 MIXTURE = "mixture"
 EXT = ".flac"

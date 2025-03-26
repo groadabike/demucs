@@ -15,13 +15,13 @@ import logging
 from dora.log import LogProgress
 import numpy as np
 import musdb
-import museval
+import fast_bss_eval
 import torch as th
 
-from apply import apply_model
-from audio import convert_audio, save_audio
-import distrib
-from utils import DummyPoolExecutor
+from .apply import apply_model
+from .audio import convert_audio, save_audio
+from . import distrib
+from .utils import DummyPoolExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -54,13 +54,7 @@ def eval_track(references, estimates, win, hop, compute_sdr=True):
     else:
         references = references.numpy()
         estimates = estimates.numpy()
-        scores = museval.metrics.bss_eval(
-            references, estimates,
-            compute_permutation=False,
-            window=win,
-            hop=hop,
-            framewise_filters=False,
-            bsseval_sources_version=False)[:-1]
+        scores = fast_bss_eval.bss_eval_sources(references, estimates)
         return scores, new_scores
 
 
@@ -140,12 +134,12 @@ def evaluate(solver, compute_sdr=False):
             for idx, target in enumerate(model.sources):
                 tracks[track_name][target] = {'nsdr': [float(nsdrs[idx])]}
             if scores is not None:
-                (sdr, isr, sir, sar) = scores
+                (sdr, sir, sar, _) = scores
                 for idx, target in enumerate(model.sources):
                     values = {
                         "SDR": sdr[idx].tolist(),
                         "SIR": sir[idx].tolist(),
-                        "ISR": isr[idx].tolist(),
+                        #"ISR": isr[idx].tolist(),
                         "SAR": sar[idx].tolist()
                     }
                     tracks[track_name][target].update(values)
